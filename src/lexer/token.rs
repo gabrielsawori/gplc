@@ -1,6 +1,8 @@
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     // Keywords
+    Module,
+    Import,
     Fn,
     Let,
     Mut,
@@ -31,11 +33,16 @@ pub enum Token {
     // Delimiters
     LParen,      // (
     RParen,      // )
-    LBrace,      // {
+    LBrace,      // {  (Keep for now in case of dicts/sets later)
     RBrace,      // }
     Comma,       // ,
     Colon,       // :
     Arrow,       // ->
+
+    // Indentation
+    Indent,
+    Dedent,
+    Newline,
 
     // Control
     EOF,
@@ -45,6 +52,8 @@ pub enum Token {
 impl Token {
     pub fn lookup_ident(ident: &str) -> Token {
         match ident {
+            "module" => Token::Module,
+            "import" => Token::Import,
             "fn" => Token::Fn,
             "let" => Token::Let,
             "mut" => Token::Mut,

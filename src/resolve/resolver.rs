@@ -85,6 +85,7 @@ impl Resolver {
                 self.scope_stack.exit_scope();
                 Ok(())
             }
+            Statement::ModuleDecl(_) | Statement::ImportDecl(_) => Ok(()),
         }
     }
 

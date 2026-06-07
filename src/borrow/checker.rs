@@ -78,6 +78,7 @@ impl BorrowChecker {
                 self.environments.pop();
                 Ok(())
             }
+            Statement::ModuleDecl(_) | Statement::ImportDecl(_) => Ok(()),
         }
     }
 

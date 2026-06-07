@@ -7,7 +7,6 @@ pub struct IRBuilder {
     next_block_id: usize,
     current_block: BasicBlock,
     blocks: Vec<BasicBlock>,
-    // Maps variable names to their allocated memory pointer (Register)
     var_environment: HashMap<String, Register>,
 }
 
@@ -35,19 +34,17 @@ impl IRBuilder {
     }
 
     pub fn build_function(&mut self, name: &str, body: &[Statement], params: &[String]) -> FunctionIR {
-        // Reset states for the new function
         self.blocks.clear();
         self.next_block_id = 1;
         self.current_block = BasicBlock { id: 0, instructions: Vec::new() };
         self.var_environment.clear();
         self.next_reg = 0;
 
-        // Create allocas for parameters
         for param in params {
             let ptr_reg = self.fresh_reg();
             self.current_block.instructions.push(Instruction::Alloca {
                 dest: ptr_reg.clone(),
-                ty: "i64".to_string(), // Defaulting to 64-bit integer for MVP
+                ty: "i64".to_string(),
             });
             self.var_environment.insert(param.clone(), ptr_reg);
         }
@@ -56,7 +53,6 @@ impl IRBuilder {
             self.build_statement(stmt);
         }
 
-        // Push the final block
         self.blocks.push(self.current_block.clone());
 
         FunctionIR {
@@ -70,21 +66,15 @@ impl IRBuilder {
         match stmt {
             Statement::LetStatement { name, is_mut: _, value } => {
                 let val_op = self.build_expression(value);
-                
-                // 1. Allocate stack memory for the variable
                 let ptr_reg = self.fresh_reg();
                 self.current_block.instructions.push(Instruction::Alloca {
                     dest: ptr_reg.clone(),
-                    ty: "i64".to_string(), // Defaulting to 64-bit integer for MVP
+                    ty: "i64".to_string(),
                 });
-
-                // 2. Store the evaluated expression into the memory
                 self.current_block.instructions.push(Instruction::Store {
                     ptr: ptr_reg.clone(),
                     value: val_op,
                 });
-
-                // Track the pointer register
                 self.var_environment.insert(name.clone(), ptr_reg);
             }
             Statement::AssignStatement { name, value } => {
@@ -104,9 +94,7 @@ impl IRBuilder {
             Statement::ExpressionStatement(expr) => {
                 self.build_expression(expr);
             }
-            Statement::FunctionDeclaration { .. } => {
-                // Handled at the module scope level in a full implementation
-            }
+            Statement::FunctionDeclaration { .. } => {}
             Statement::IfStatement { condition, body, else_body } => {
                 let cond_op = self.build_expression(condition);
 
@@ -123,11 +111,9 @@ impl IRBuilder {
                 self.blocks.push(self.current_block.clone());
 
                 self.current_block = true_block;
-
                 for b_stmt in body {
                     self.build_statement(b_stmt);
                 }
-
                 self.current_block.instructions.push(Instruction::Jmp { dest: merge_block.id });
                 self.blocks.push(self.current_block.clone());
 
@@ -178,6 +164,7 @@ impl IRBuilder {
 
                 self.current_block = merge_block;
             }
+            Statement::ModuleDecl(_) | Statement::ImportDecl(_) => {}
         }
     }
 

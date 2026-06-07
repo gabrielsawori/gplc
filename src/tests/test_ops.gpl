@@ -1,18 +1,16 @@
-fn test_ops(a, b) -> i32 {
+module main
+
+fn test_ops(a, b) -> i32:
     let mut count = 0
-    if a == b {
+    if a == b:
         count = count + 1
-    }
-    if a != b {
+    if a != b:
         count = count + 10
-    }
-    if a <= b {
+    if a <= b:
         count = count + 100
-    }
-    if a >= b {
+    if a >= b:
         count = count + 1000
-    }
     return count
-}
+
 let res = test_ops(5, 10)
 return res
