@@ -34,17 +34,47 @@ impl BorrowChecker {
                 }
                 Ok(())
             }
+            Statement::AssignStatement { name, value } => {
+                self.check_expression(value)?;
+                self.verify_access(name)?;
+                Ok(())
+            }
             Statement::ExpressionStatement(expr) | Statement::ReturnStatement(expr) => {
                 self.check_expression(expr)?;
                 Ok(())
             }
-            Statement::FunctionDeclaration { name: _, return_type: _, body } => {
+            Statement::FunctionDeclaration { name: _, return_type: _, body, params: _ } => {
                 // Enter new scope for function body
                 self.environments.push(HashMap::new());
                 for b_stmt in body {
                     self.check_statement(b_stmt)?;
                 }
                 // Exit scope, dropping all local lifetimes
+                self.environments.pop();
+                Ok(())
+            }
+            Statement::IfStatement { condition, body, else_body } => {
+                self.check_expression(condition)?;
+                self.environments.push(HashMap::new());
+                for b_stmt in body {
+                    self.check_statement(b_stmt)?;
+                }
+                self.environments.pop();
+                if let Some(e_body) = else_body {
+                    self.environments.push(HashMap::new());
+                    for b_stmt in e_body {
+                        self.check_statement(b_stmt)?;
+                    }
+                    self.environments.pop();
+                }
+                Ok(())
+            }
+            Statement::WhileStatement { condition, body } => {
+                self.check_expression(condition)?;
+                self.environments.push(HashMap::new());
+                for b_stmt in body {
+                    self.check_statement(b_stmt)?;
+                }
                 self.environments.pop();
                 Ok(())
             }
@@ -64,7 +94,14 @@ impl BorrowChecker {
                 self.check_expression(right)?;
                 Ok(())
             }
-            Expression::IntLiteral(_) | Expression::StringLiteral(_) => {
+            Expression::Call(func, args) => {
+                self.check_expression(func)?;
+                for arg in args {
+                    self.check_expression(arg)?;
+                }
+                Ok(())
+            }
+            Expression::IntLiteral(_) | Expression::StringLiteral(_) | Expression::BoolLiteral(_) => {
                 // Primitives do not violate borrow rules on instantiation
                 Ok(())
             }

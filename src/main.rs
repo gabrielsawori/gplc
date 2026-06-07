@@ -19,7 +19,7 @@ pub mod types;
 
 use crate::driver::Driver;
 use crate::ir::builder::IRBuilder;
-use crate::ir::gir::{FunctionIR, ModuleIR};
+use crate::ir::gir::{ModuleIR};
 use crate::codegen::LLVMCodegen;
 
 #[derive(Parser)]
@@ -62,11 +62,24 @@ fn main() {
             println!("🔍 Generating Intermediate Representation (GIR)...");
             let mut ir_builder = IRBuilder::new();
             
-            // For MVP, we wrap the global statements inside an implicit "main" function
-            let main_func_ir = ir_builder.build_function("main", &ast);
+            // We need to collect all functions. For MVP, assume any FunctionDeclaration is a function, and the rest is in `main`.
+            let mut functions = Vec::new();
+            let mut main_body = Vec::new();
+            for stmt in ast {
+                match stmt {
+                    crate::ast::nodes::Statement::FunctionDeclaration { name, params, return_type: _, body } => {
+                        functions.push(ir_builder.build_function(&name, &body, &params));
+                    },
+                    _ => {
+                        main_body.push(stmt);
+                    }
+                }
+            }
+            functions.push(ir_builder.build_function("main", &main_body, &[]));
+
             let gir_module = ModuleIR {
                 name: file.clone(),
-                functions: vec![main_func_ir],
+                functions,
             };
 
             // 3. Run Backend (GIR -> LLVM IR)
@@ -88,6 +101,14 @@ fn main() {
 
             if matches!(cli.command, Commands::Run { .. }) {
                 println!("⚠️  JIT Execution (Run) feature will be integrated next!");
+
+                // Let's actually JIT the function and run it
+                let execution_engine = llvm_codegen.module.create_jit_execution_engine(inkwell::OptimizationLevel::None).unwrap();
+                unsafe {
+                    let main_func = execution_engine.get_function::<unsafe extern "C" fn() -> u64>("main").unwrap();
+                    let res = main_func.call();
+                    println!("🎉 Program execution returned: {}", res);
+                }
             }
         }
     }

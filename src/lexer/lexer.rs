@@ -2,9 +2,9 @@ use crate::lexer::token::Token;
 
 pub struct Lexer {
     input: Vec<char>,
-    position: usize,      // Current position in input (points to current char)
-    read_position: usize, // Current reading position (after current char)
-    ch: char,             // Current char under examination
+    position: usize,
+    read_position: usize,
+    ch: char,
 }
 
 impl Lexer {
@@ -21,7 +21,7 @@ impl Lexer {
 
     fn read_char(&mut self) {
         if self.read_position >= self.input.len() {
-            self.ch = '\0'; // EOF
+            self.ch = '\0';
         } else {
             self.ch = self.input[self.read_position];
         }
@@ -41,7 +41,22 @@ impl Lexer {
         self.skip_whitespace();
 
         let tok = match self.ch {
-            '=' => Token::Assign,
+            '=' => {
+                if self.peek_char() == '=' {
+                    self.read_char();
+                    Token::Eq
+                } else {
+                    Token::Assign
+                }
+            }
+            '!' => {
+                if self.peek_char() == '=' {
+                    self.read_char();
+                    Token::NotEq
+                } else {
+                    Token::Illegal(self.ch)
+                }
+            }
             '+' => Token::Plus,
             '-' => {
                 if self.peek_char() == '>' {
@@ -53,6 +68,22 @@ impl Lexer {
             }
             '*' => Token::Asterisk,
             '/' => Token::Slash,
+            '<' => {
+                if self.peek_char() == '=' {
+                    self.read_char();
+                    Token::LtEq
+                } else {
+                    Token::Lt
+                }
+            }
+            '>' => {
+                if self.peek_char() == '=' {
+                    self.read_char();
+                    Token::GtEq
+                } else {
+                    Token::Gt
+                }
+            }
             '(' => Token::LParen,
             ')' => Token::RParen,
             '{' => Token::LBrace,

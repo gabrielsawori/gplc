@@ -20,10 +20,19 @@ pub enum Instruction {
     Sub { dest: Register, left: Operand, right: Operand },
     Mul { dest: Register, left: Operand, right: Operand },
     Div { dest: Register, left: Operand, right: Operand },
+    // Comparisons
+    CmpLt { dest: Register, left: Operand, right: Operand },
+    CmpGt { dest: Register, left: Operand, right: Operand },
+    CmpLtEq { dest: Register, left: Operand, right: Operand },
+    CmpGtEq { dest: Register, left: Operand, right: Operand },
+    CmpEq { dest: Register, left: Operand, right: Operand },
+    CmpNotEq { dest: Register, left: Operand, right: Operand },
 
     // Control Flow
     Return { value: Option<Operand> },
     Call { dest: Option<Register>, func: String, args: Vec<Operand> },
+    Br { cond: Operand, if_true: usize, if_false: usize },
+    Jmp { dest: usize },
 }
 
 #[derive(Debug, Clone)]
@@ -35,6 +44,7 @@ pub struct BasicBlock {
 #[derive(Debug, Clone)]
 pub struct FunctionIR {
     pub name: String,
+    pub params: usize, // Store number of parameters
     pub blocks: Vec<BasicBlock>,
 }
 

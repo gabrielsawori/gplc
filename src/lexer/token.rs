@@ -5,11 +5,15 @@ pub enum Token {
     Let,
     Mut,
     Return,
+    If,
+    Else,
+    While,
 
     // Identifiers and Literals
     Ident(String),
     Int(i64),
     String(String),
+    Bool(bool),
 
     // Operators
     Assign,      // =
@@ -17,6 +21,12 @@ pub enum Token {
     Minus,       // -
     Asterisk,    // *
     Slash,       // /
+    Lt,          // <
+    Gt,          // >
+    LtEq,        // <=
+    GtEq,        // >=
+    Eq,          // ==
+    NotEq,       // !=
 
     // Delimiters
     LParen,      // (
@@ -39,6 +49,11 @@ impl Token {
             "let" => Token::Let,
             "mut" => Token::Mut,
             "return" => Token::Return,
+            "if" => Token::If,
+            "else" => Token::Else,
+            "while" => Token::While,
+            "true" => Token::Bool(true),
+            "false" => Token::Bool(false),
             _ => Token::Ident(ident.to_string()),
         }
     }
