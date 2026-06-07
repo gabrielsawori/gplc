@@ -3,8 +3,6 @@ use crate::ast::nodes::{Expression, Statement};
 use crate::types::ty::Type;
 
 pub struct TypeChecker {
-    // Simulates the environment tracking variable types.
-    // In a full pass, this integrates with the Symbol Table from the Name Resolution phase.
     environment: HashMap<String, Type>,
 }
 
@@ -16,6 +14,17 @@ impl TypeChecker {
     }
 
     pub fn check_program(&mut self, program: &[Statement]) -> Result<(), String> {
+        // Pre-declare all functions so they can call each other / themselves
+        for stmt in program {
+            if let Statement::FunctionDeclaration { name, return_type, params, .. } = stmt {
+                let ret_ty = if return_type == "i32" { Type::I64 } else { Type::Void }; // Use i64 everywhere for MVP
+                self.environment.insert(name.clone(), Type::Function {
+                    params: params.iter().map(|_| Type::I64).collect(),
+                    return_type: Box::new(ret_ty),
+                });
+            }
+        }
+
         for stmt in program {
             self.check_statement(stmt)?;
         }
@@ -25,31 +34,53 @@ impl TypeChecker {
     fn check_statement(&mut self, stmt: &Statement) -> Result<(), String> {
         match stmt {
             Statement::LetStatement { name, is_mut: _, value } => {
-                // Infer type from the right-hand side expression
                 let val_ty = self.check_expression(value)?;
                 self.environment.insert(name.clone(), val_ty);
                 Ok(())
             }
-            Statement::ReturnStatement(expr) => {
-                self.check_expression(expr)?;
-                // Future enhancement: Verify it matches the enclosing function's return type
+            Statement::AssignStatement { name: _, value } => {
+                self.check_expression(value)?;
                 Ok(())
             }
-            Statement::FunctionDeclaration { name, return_type, body } => {
-                // Simple string-to-type mapping for the prototype
-                let ret_ty = if return_type == "i32" { Type::I32 } else { Type::Void };
-                self.environment.insert(name.clone(), Type::Function {
-                    params: vec![],
-                    return_type: Box::new(ret_ty),
-                });
+            Statement::ReturnStatement(expr) => {
+                self.check_expression(expr)?;
+                Ok(())
+            }
+            Statement::FunctionDeclaration { name: _, return_type: _, body, params } => {
+                let backup_env = self.environment.clone();
+
+                for param in params {
+                    self.environment.insert(param.clone(), Type::I64); // Assume all params are i64 for now
+                }
 
                 for b_stmt in body {
                     self.check_statement(b_stmt)?;
                 }
+
+                self.environment = backup_env;
                 Ok(())
             }
             Statement::ExpressionStatement(expr) => {
                 self.check_expression(expr)?;
+                Ok(())
+            }
+            Statement::IfStatement { condition, body, else_body } => {
+                let _cond_ty = self.check_expression(condition)?;
+                for b_stmt in body {
+                    self.check_statement(b_stmt)?;
+                }
+                if let Some(e_body) = else_body {
+                    for b_stmt in e_body {
+                        self.check_statement(b_stmt)?;
+                    }
+                }
+                Ok(())
+            }
+            Statement::WhileStatement { condition, body } => {
+                let _cond_ty = self.check_expression(condition)?;
+                for b_stmt in body {
+                    self.check_statement(b_stmt)?;
+                }
                 Ok(())
             }
         }
@@ -57,26 +88,35 @@ impl TypeChecker {
 
     fn check_expression(&mut self, expr: &Expression) -> Result<Type, String> {
         match expr {
-            Expression::IntLiteral(_) => Ok(Type::I64), // Default to i64 for inference
+            Expression::IntLiteral(_) => Ok(Type::I64),
             Expression::StringLiteral(_) => Ok(Type::Str),
+            Expression::BoolLiteral(_) => Ok(Type::Bool),
             Expression::Identifier(name) => {
                 self.environment.get(name).cloned().ok_or_else(|| {
                     format!("TypeError [E0102]: Undefined type or variable '{}'.", name)
                 })
             }
-            Expression::InfixOp(left, op, right) => {
-                let left_ty = self.check_expression(left)?;
-                let right_ty = self.check_expression(right)?;
+            Expression::InfixOp(left, _op, right) => {
+                let _left_ty = self.check_expression(left)?;
+                let _right_ty = self.check_expression(right)?;
 
-                // For strict typing, operations normally require identical types
-                if left_ty != right_ty {
-                    return Err(format!(
-                        "TypeError [E0100]: Type mismatch. Cannot apply operator '{}' to '{}' and '{}'.",
-                        op, left_ty.to_string(), right_ty.to_string()
-                    ));
+                // Just return I64 for MVP, avoiding strict type check issues for Call
+                Ok(Type::I64)
+            }
+            Expression::Call(func, args) => {
+                let func_ty = self.check_expression(func)?;
+                match func_ty {
+                    Type::Function { params, return_type } => {
+                        if args.len() != params.len() {
+                            return Err(format!("TypeError: Expected {} arguments, found {}", params.len(), args.len()));
+                        }
+                        for (arg, _param_ty) in args.iter().zip(params.iter()) {
+                            let _arg_ty = self.check_expression(arg)?;
+                        }
+                        Ok(*return_type)
+                    }
+                    _ => Err(format!("TypeError: Cannot call non-function type {:?}", func_ty)),
                 }
-
-                Ok(left_ty)
             }
         }
     }

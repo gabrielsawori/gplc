@@ -1,0 +1,8 @@
+[package]
+name = "gplc"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.4.7", features = ["derive"] }
+inkwell = { version = "0.1.1", features = ["llvm14-0"] }

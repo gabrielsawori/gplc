@@ -25,7 +25,6 @@ impl Parser {
         }
     }
 
-    /// Entry point for the parser
     pub fn parse_program(&mut self) -> Result<Vec<Statement>, String> {
         let mut statements = Vec::new();
 
@@ -42,8 +41,34 @@ impl Parser {
             Token::Let => self.parse_let_statement(),
             Token::Return => self.parse_return_statement(),
             Token::Fn => self.parse_function_declaration(),
+            Token::If => self.parse_if_statement(),
+            Token::While => self.parse_while_statement(),
+            Token::Ident(_) => {
+                if *self.peek_token() == Token::Assign {
+                    self.parse_assign_statement()
+                } else {
+                    self.parse_expression_statement()
+                }
+            },
             _ => self.parse_expression_statement(),
         }
+    }
+
+    fn parse_assign_statement(&mut self) -> Result<Statement, String> {
+        let name = match self.current_token() {
+            Token::Ident(ident) => ident.clone(),
+            _ => return Err(format!("SyntaxError: Expected identifier, found {:?}", self.current_token())),
+        };
+        self.advance();
+
+        if *self.current_token() != Token::Assign {
+            return Err(format!("SyntaxError: Expected '=' after identifier '{}'", name));
+        }
+        self.advance();
+
+        let value = self.parse_expression()?;
+
+        Ok(Statement::AssignStatement { name, value })
     }
 
     fn parse_let_statement(&mut self) -> Result<Statement, String> {
@@ -92,13 +117,25 @@ impl Parser {
         };
         self.advance();
 
-        // Expect '(' and ')' for now (no params implementation in this minimal pass)
         if *self.current_token() != Token::LParen { return Err("SyntaxError: Expected '('".to_string()); }
         self.advance();
+
+        let mut params = Vec::new();
+        while *self.current_token() != Token::RParen && *self.current_token() != Token::EOF {
+            if let Token::Ident(param_name) = self.current_token() {
+                params.push(param_name.clone());
+                self.advance();
+            } else {
+                return Err("SyntaxError: Expected identifier in parameter list".to_string());
+            }
+            if *self.current_token() == Token::Comma {
+                self.advance();
+            }
+        }
+
         if *self.current_token() != Token::RParen { return Err("SyntaxError: Expected ')'".to_string()); }
         self.advance();
 
-        // Parse return type (e.g., -> i32)
         let mut return_type = "void".to_string();
         if *self.current_token() == Token::Arrow {
             self.advance();
@@ -110,7 +147,6 @@ impl Parser {
             }
         }
 
-        // Expect '{'
         if *self.current_token() != Token::LBrace { return Err("SyntaxError: Expected '{' before function body".to_string()); }
         self.advance();
 
@@ -119,11 +155,62 @@ impl Parser {
             body.push(self.parse_statement()?);
         }
 
-        // Expect '}'
         if *self.current_token() != Token::RBrace { return Err("SyntaxError: Expected '}' after function body".to_string()); }
         self.advance();
 
-        Ok(Statement::FunctionDeclaration { name, return_type, body })
+        Ok(Statement::FunctionDeclaration { name, params, return_type, body })
+    }
+
+    fn parse_if_statement(&mut self) -> Result<Statement, String> {
+        self.advance(); // Skip 'if'
+
+        let condition = self.parse_expression()?;
+
+        if *self.current_token() != Token::LBrace { return Err("SyntaxError: Expected '{' after if condition".to_string()); }
+        self.advance();
+
+        let mut body = Vec::new();
+        while *self.current_token() != Token::RBrace && *self.current_token() != Token::EOF {
+            body.push(self.parse_statement()?);
+        }
+
+        if *self.current_token() != Token::RBrace { return Err("SyntaxError: Expected '}' after if body".to_string()); }
+        self.advance();
+
+        let mut else_body = None;
+        if *self.current_token() == Token::Else {
+            self.advance();
+            if *self.current_token() != Token::LBrace { return Err("SyntaxError: Expected '{' after else".to_string()); }
+            self.advance();
+            let mut e_body = Vec::new();
+            while *self.current_token() != Token::RBrace && *self.current_token() != Token::EOF {
+                e_body.push(self.parse_statement()?);
+            }
+            if *self.current_token() != Token::RBrace { return Err("SyntaxError: Expected '}' after else body".to_string()); }
+            self.advance();
+            else_body = Some(e_body);
+        }
+
+        Ok(Statement::IfStatement { condition, body, else_body })
+    }
+
+    fn parse_while_statement(&mut self) -> Result<Statement, String> {
+        self.advance(); // Skip 'while'
+
+        let condition = self.parse_expression()?;
+
+        if *self.current_token() != Token::LBrace { return Err("SyntaxError: Expected '{' after while condition".to_string()); }
+        self.advance();
+
+        let mut body = Vec::new();
+        while *self.current_token() != Token::RBrace && *self.current_token() != Token::EOF {
+            body.push(self.parse_statement()?);
+        }
+
+        if *self.current_token() != Token::RBrace { return Err("SyntaxError: Expected '}' after while body".to_string()); }
+        self.advance();
+
+        Ok(Statement::WhileStatement { condition, body })
     }
 
     fn parse_expression_statement(&mut self) -> Result<Statement, String> {
@@ -131,10 +218,47 @@ impl Parser {
         Ok(Statement::ExpressionStatement(expr))
     }
 
-    /// Basic expression parser
+    // A simple precedence parser
     fn parse_expression(&mut self) -> Result<Expression, String> {
-        // Very simplistic parser targeting our defined tokens
-        let left = match self.current_token() {
+        self.parse_expression_precedence(0)
+    }
+
+    fn get_precedence(token: &Token) -> u8 {
+        match token {
+            Token::Eq | Token::NotEq => 1,
+            Token::Lt | Token::Gt | Token::LtEq | Token::GtEq => 2,
+            Token::Plus | Token::Minus => 3,
+            Token::Asterisk | Token::Slash => 4,
+            _ => 0,
+        }
+    }
+
+    fn parse_expression_precedence(&mut self, precedence: u8) -> Result<Expression, String> {
+        let mut left = self.parse_expression_primary()?;
+
+        loop {
+            let next_prec = Self::get_precedence(self.current_token());
+            if next_prec == 0 || next_prec <= precedence {
+                break;
+            }
+
+            let op = match self.current_token() {
+                Token::Plus => "+", Token::Minus => "-", Token::Asterisk => "*", Token::Slash => "/",
+                Token::Lt => "<", Token::Gt => ">", Token::LtEq => "<=", Token::GtEq => ">=",
+                Token::Eq => "==", Token::NotEq => "!=",
+                _ => unreachable!()
+            }.to_string();
+            self.advance();
+
+            let right = self.parse_expression_precedence(next_prec)?;
+            left = Expression::InfixOp(Box::new(left), op, Box::new(right));
+        }
+
+        Ok(left)
+    }
+
+    fn parse_expression_primary(&mut self) -> Result<Expression, String> {
+         let mut primary = match self.current_token() {
             Token::Int(val) => {
                 let expr = Expression::IntLiteral(*val);
                 self.advance();
@@ -145,28 +269,49 @@ impl Parser {
                 self.advance();
                 expr
             }
+            Token::Bool(val) => {
+                let expr = Expression::BoolLiteral(*val);
+                self.advance();
+                expr
+            }
             Token::Ident(val) => {
                 let expr = Expression::Identifier(val.clone());
                 self.advance();
                 expr
             }
-            _ => return Err(format!("SyntaxError: Unexpected token in expression: {:?}", self.current_token())),
+            Token::LParen => {
+                self.advance();
+                let expr = self.parse_expression()?;
+                if *self.current_token() != Token::RParen {
+                    return Err("SyntaxError: Expected ')'".to_string());
+                }
+                self.advance();
+                expr
+            }
+            _ => return Err(format!("SyntaxError: Unexpected token in expression primary: {:?}", self.current_token())),
         };
 
-        // Check for basic infix math operations (+, -, *, /)
-        match self.current_token() {
-            Token::Plus | Token::Minus | Token::Asterisk | Token::Slash => {
-                let op = match self.current_token() {
-                    Token::Plus => "+", Token::Minus => "-", Token::Asterisk => "*", Token::Slash => "/", _ => unreachable!()
-                }.to_string();
-                self.advance();
-                
-                let right = self.parse_expression()?; // Recursively parse the right side
-                return Ok(Expression::InfixOp(Box::new(left), op, Box::new(right)));
+        loop {
+            match self.current_token() {
+                Token::LParen => {
+                    self.advance();
+                    let mut args = Vec::new();
+                    while *self.current_token() != Token::RParen && *self.current_token() != Token::EOF {
+                        args.push(self.parse_expression()?);
+                        if *self.current_token() == Token::Comma {
+                            self.advance();
+                        }
+                    }
+                    if *self.current_token() != Token::RParen {
+                        return Err("SyntaxError: Expected ')' in function call".to_string());
+                    }
+                    self.advance();
+                    primary = Expression::Call(Box::new(primary), args);
+                }
+                _ => break,
             }
-            _ => {} // Not an infix operation
         }
 
-        Ok(left)
+        Ok(primary)
     }
 }

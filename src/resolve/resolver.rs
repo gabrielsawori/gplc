@@ -28,16 +28,26 @@ impl Resolver {
                 self.scope_stack.define(name.clone(), *is_mut)?;
                 Ok(())
             }
+            Statement::AssignStatement { name, value } => {
+                self.resolve_expression(value)?;
+                if self.scope_stack.lookup(name).is_none() {
+                    return Err(format!("ReferenceError: Undefined variable '{}'.", name));
+                }
+                Ok(())
+            }
             Statement::ReturnStatement(expr) => {
                 self.resolve_expression(expr)?;
                 Ok(())
             }
-            Statement::FunctionDeclaration { name, return_type: _, body } => {
+            Statement::FunctionDeclaration { name, return_type: _, body, params } => {
                 // 1. Define the function in the current (outer) scope
                 self.scope_stack.define(name.clone(), false)?;
                 
                 // 2. Enter a new scope for the function body
                 self.scope_stack.enter_scope();
+                for param in params {
+                    self.scope_stack.define(param.clone(), false)?;
+                }
                 for b_stmt in body {
                     self.resolve_statement(b_stmt)?;
                 }
@@ -47,6 +57,32 @@ impl Resolver {
             }
             Statement::ExpressionStatement(expr) => {
                 self.resolve_expression(expr)?;
+                Ok(())
+            }
+            Statement::IfStatement { condition, body, else_body } => {
+                self.resolve_expression(condition)?;
+                self.scope_stack.enter_scope();
+                for b_stmt in body {
+                    self.resolve_statement(b_stmt)?;
+                }
+                self.scope_stack.exit_scope();
+
+                if let Some(e_body) = else_body {
+                    self.scope_stack.enter_scope();
+                    for b_stmt in e_body {
+                        self.resolve_statement(b_stmt)?;
+                    }
+                    self.scope_stack.exit_scope();
+                }
+                Ok(())
+            }
+            Statement::WhileStatement { condition, body } => {
+                self.resolve_expression(condition)?;
+                self.scope_stack.enter_scope();
+                for b_stmt in body {
+                    self.resolve_statement(b_stmt)?;
+                }
+                self.scope_stack.exit_scope();
                 Ok(())
             }
         }
@@ -66,7 +102,14 @@ impl Resolver {
                 self.resolve_expression(right)?;
                 Ok(())
             }
-            Expression::IntLiteral(_) | Expression::StringLiteral(_) => {
+            Expression::Call(func, args) => {
+                self.resolve_expression(func)?;
+                for arg in args {
+                    self.resolve_expression(arg)?;
+                }
+                Ok(())
+            }
+            Expression::IntLiteral(_) | Expression::StringLiteral(_) | Expression::BoolLiteral(_) => {
                 // Primitives do not need name resolution
                 Ok(())
             }
