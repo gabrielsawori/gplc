@@ -1,7 +1,7 @@
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
-use inkwell::values::{BasicValueEnum, PointerValue, FunctionValue, IntValue};
+use inkwell::values::{BasicValueEnum, PointerValue, FunctionValue};
 use std::collections::HashMap;
 
 use crate::ir::gir::{FunctionIR, Instruction, ModuleIR, Operand, Register};
