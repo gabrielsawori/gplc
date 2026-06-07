@@ -25,19 +25,30 @@ impl Parser {
         }
     }
 
+    fn skip_newlines(&mut self) {
+        while *self.current_token() == Token::Newline {
+            self.advance();
+        }
+    }
+
     pub fn parse_program(&mut self) -> Result<Vec<Statement>, String> {
         let mut statements = Vec::new();
+
+        self.skip_newlines();
 
         while *self.current_token() != Token::EOF {
             let stmt = self.parse_statement()?;
             statements.push(stmt);
+            self.skip_newlines();
         }
 
         Ok(statements)
     }
 
     fn parse_statement(&mut self) -> Result<Statement, String> {
-        match self.current_token() {
+        let stmt = match self.current_token() {
+            Token::Module => self.parse_module_decl(),
+            Token::Import => self.parse_import_decl(),
             Token::Let => self.parse_let_statement(),
             Token::Return => self.parse_return_statement(),
             Token::Fn => self.parse_function_declaration(),
@@ -51,7 +62,34 @@ impl Parser {
                 }
             },
             _ => self.parse_expression_statement(),
+        }?;
+
+        // Statements usually end with a newline or EOF, let's skip the trailing newline.
+        if *self.current_token() == Token::Newline {
+            self.advance();
         }
+        Ok(stmt)
+    }
+
+    fn parse_module_decl(&mut self) -> Result<Statement, String> {
+        self.advance(); // Skip 'module'
+        let name = match self.current_token() {
+            Token::Ident(ident) => ident.clone(),
+            _ => return Err("SyntaxError: Expected identifier after 'module'".to_string()),
+        };
+        self.advance();
+        Ok(Statement::ModuleDecl(name))
+    }
+
+    fn parse_import_decl(&mut self) -> Result<Statement, String> {
+        self.advance(); // Skip 'import'
+        let name = match self.current_token() {
+            Token::String(val) => val.clone(),
+            Token::Ident(ident) => ident.clone(),
+            _ => return Err("SyntaxError: Expected string or identifier after 'import'".to_string()),
+        };
+        self.advance();
+        Ok(Statement::ImportDecl(name))
     }
 
     fn parse_assign_statement(&mut self) -> Result<Statement, String> {
@@ -108,6 +146,29 @@ impl Parser {
         Ok(Statement::ReturnStatement(value))
     }
 
+    fn parse_block(&mut self) -> Result<Vec<Statement>, String> {
+        if *self.current_token() != Token::Colon { return Err(format!("SyntaxError: Expected ':' before block, got {:?}", self.current_token())); }
+        self.advance();
+
+        if *self.current_token() == Token::Newline {
+            self.advance();
+        }
+
+        if *self.current_token() != Token::Indent { return Err("SyntaxError: Expected indented block".to_string()); }
+        self.advance();
+
+        let mut body = Vec::new();
+        while *self.current_token() != Token::Dedent && *self.current_token() != Token::EOF {
+            body.push(self.parse_statement()?);
+            self.skip_newlines();
+        }
+
+        if *self.current_token() != Token::Dedent { return Err("SyntaxError: Expected dedent after block".to_string()); }
+        self.advance();
+
+        Ok(body)
+    }
+
     fn parse_function_declaration(&mut self) -> Result<Statement, String> {
         self.advance(); // Skip 'fn'
 
@@ -147,16 +208,7 @@ impl Parser {
             }
         }
 
-        if *self.current_token() != Token::LBrace { return Err("SyntaxError: Expected '{' before function body".to_string()); }
-        self.advance();
-
-        let mut body = Vec::new();
-        while *self.current_token() != Token::RBrace && *self.current_token() != Token::EOF {
-            body.push(self.parse_statement()?);
-        }
-
-        if *self.current_token() != Token::RBrace { return Err("SyntaxError: Expected '}' after function body".to_string()); }
-        self.advance();
+        let body = self.parse_block()?;
 
         Ok(Statement::FunctionDeclaration { name, params, return_type, body })
     }
@@ -166,28 +218,12 @@ impl Parser {
 
         let condition = self.parse_expression()?;
 
-        if *self.current_token() != Token::LBrace { return Err("SyntaxError: Expected '{' after if condition".to_string()); }
-        self.advance();
-
-        let mut body = Vec::new();
-        while *self.current_token() != Token::RBrace && *self.current_token() != Token::EOF {
-            body.push(self.parse_statement()?);
-        }
-
-        if *self.current_token() != Token::RBrace { return Err("SyntaxError: Expected '}' after if body".to_string()); }
-        self.advance();
+        let body = self.parse_block()?;
 
         let mut else_body = None;
         if *self.current_token() == Token::Else {
             self.advance();
-            if *self.current_token() != Token::LBrace { return Err("SyntaxError: Expected '{' after else".to_string()); }
-            self.advance();
-            let mut e_body = Vec::new();
-            while *self.current_token() != Token::RBrace && *self.current_token() != Token::EOF {
-                e_body.push(self.parse_statement()?);
-            }
-            if *self.current_token() != Token::RBrace { return Err("SyntaxError: Expected '}' after else body".to_string()); }
-            self.advance();
+            let e_body = self.parse_block()?;
             else_body = Some(e_body);
         }
 
@@ -199,16 +235,7 @@ impl Parser {
 
         let condition = self.parse_expression()?;
 
-        if *self.current_token() != Token::LBrace { return Err("SyntaxError: Expected '{' after while condition".to_string()); }
-        self.advance();
-
-        let mut body = Vec::new();
-        while *self.current_token() != Token::RBrace && *self.current_token() != Token::EOF {
-            body.push(self.parse_statement()?);
-        }
-
-        if *self.current_token() != Token::RBrace { return Err("SyntaxError: Expected '}' after while body".to_string()); }
-        self.advance();
+        let body = self.parse_block()?;
 
         Ok(Statement::WhileStatement { condition, body })
     }

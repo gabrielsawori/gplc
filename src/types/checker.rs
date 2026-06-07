@@ -83,6 +83,7 @@ impl TypeChecker {
                 }
                 Ok(())
             }
+            Statement::ModuleDecl(_) | Statement::ImportDecl(_) => Ok(()),
         }
     }
 

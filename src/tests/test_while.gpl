@@ -1,6 +1,7 @@
-let count = 0
+module main
+
+let mut count = 0
 let limit = 10
-while count < limit {
+while count < limit:
     count = count + 1
-}
 return count

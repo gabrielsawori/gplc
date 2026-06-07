@@ -10,6 +10,8 @@ pub enum Expression {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
+    ModuleDecl(String),
+    ImportDecl(String),
     LetStatement {
         name: String,
         is_mut: bool,

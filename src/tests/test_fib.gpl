@@ -1,9 +1,9 @@
-fn fib(n) -> i32 {
-    if n < 2 {
+module main
+
+fn fib(n) -> i32:
+    if n < 2:
         return n
-    }
     return fib(n - 1) + fib(n - 2)
-}
 
 let res = fib(10)
 return res
