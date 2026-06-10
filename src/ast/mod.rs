@@ -1,3 +1,7 @@
 pub mod nodes;
-pub mod printer;
 pub mod visitor;
+pub mod printer;
+
+pub use nodes::*;
+pub use visitor::Visitor;
+pub use printer::print_ast;

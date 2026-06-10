@@ -1,5 +1,5 @@
+pub mod error;
 pub mod parser;
-pub mod precedence;
-pub mod tests;
 
+pub use error::ParseError;
 pub use parser::Parser;
